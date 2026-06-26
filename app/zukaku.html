@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>図郭コード → NW座標変換</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      margin: 0 0 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.12);
+    }
+
+    label {
+      display: block;
+      font-size: .85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #444;
+    }
+
+    textarea {
+      width: 100%;
+      height: 160px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: .9rem;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: vertical;
+    }
+
+    textarea:focus { outline: none; border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,.25); }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: .9rem;
+    }
+
+    .option-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: .9rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    #btnRun {
+      background: #4a90d9;
+      color: #fff;
+    }
+    #btnRun:hover { background: #357abd; }
+
+    #btnCsv {
+      background: #27ae60;
+      color: #fff;
+      display: none;
+    }
+    #btnCsv:hover { background: #1e8449; }
+
+    #btnClear {
+      background: #eee;
+      color: #555;
+    }
+    #btnClear:hover { background: #ddd; }
+
+    .summary {
+      font-size: .85rem;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .summary b { color: #222; }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: .85rem;
+      min-width: 560px;
+    }
+
+    th {
+      background: #4a90d9;
+      color: #fff;
+      padding: 8px 10px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+    }
+
+    tr:nth-child(even) td { background: #f9f9f9; }
+
+    .err td { color: #c0392b; }
+
+    #results { display: none; }
+  </style>
+</head>
+<body>
+
+<h1>図郭コード → NW座標変換</h1>
+
+<div class="card">
+  <label for="codes">図郭コード（1行に1コード）</label>
+  <textarea id="codes" placeholder="例:
+08ne2332
+08ne23321
+08ne233214"></textarea>
+
+  <div class="option-row">
+    <input type="checkbox" id="legacyLv1250" />
+    <label for="legacyLv1250" style="margin:0;font-weight:400;">
+      レベル1250 を使用する
+      <span style="color:#888;font-size:.8rem;">（8桁・末尾数字をlv1250として扱う）</span>
+    </label>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnRun">変換実行</button>
+    <button id="btnCsv">CSVダウンロード</button>
+    <button id="btnClear">クリア</button>
+  </div>
+</div>
+
+<div class="card" id="results">
+  <p class="summary" id="summary"></p>
+  <div class="table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>図郭コード</th>
+          <th>level</th>
+          <th>no19</th>
+          <th>xNW</th>
+          <th>yNW</th>
+          <th>dx</th>
+          <th>dy</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  import { getZukakuNW } from './zukaku.js';
+
+  let rows = [];
+
+  document.getElementById('btnRun').addEventListener('click', () => {
+    const raw = document.getElementById('codes').value;
+    const useLegacy = document.getElementById('legacyLv1250').checked;
+
+    const codes = raw
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (codes.length === 0) return;
+
+    rows = codes.map((code, i) => {
+      const r = getZukakuNW(code, useLegacy);
+      return { i: i + 1, code, ...r };
+    });
+
+    renderTable(rows);
+  });
+
+  document.getElementById('btnCsv').addEventListener('click', () => {
+    if (rows.length === 0) return;
+    const header = ['#', '図郭コード', 'level', 'no19', 'xNW', 'yNW', 'dx', 'dy'];
+    const lines = [header.join(',')];
+    for (const r of rows) {
+      lines.push([
+        r.i,
+        r.code,
+        r.level ?? '',
+        r.no19 ?? '',
+        r.xNW  ?? '',
+        r.yNW  ?? '',
+        r.dx   ?? '',
+        r.dy   ?? '',
+      ].join(','));
+    }
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zukaku_nw.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btnClear').addEventListener('click', () => {
+    document.getElementById('codes').value = '';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('btnCsv').style.display = 'none';
+    rows = [];
+  });
+
+  function renderTable(rows) {
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+
+    let errCount = 0;
+    for (const r of rows) {
+      const isErr = r.level === 'error' || r.xNW == null;
+      if (isErr) errCount++;
+      const tr = document.createElement('tr');
+      if (isErr) tr.className = 'err';
+      tr.innerHTML = [
+        r.i,
+        r.code,
+        r.level ?? '—',
+        r.no19 ?? '—',
+        r.xNW  ?? '—',
+        r.yNW  ?? '—',
+        r.dx   ?? '—',
+        r.dy   ?? '—',
+      ].map(v => `<td>${v}</td>`).join('');
+      tbody.appendChild(tr);
+    }
+
+    const ok = rows.length - errCount;
+    document.getElementById('summary').innerHTML =
+      `<b>${rows.length}</b> 件処理 ／ 成功 <b>${ok}</b> 件 ／ エラー <b>${errCount}</b> 件`;
+
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('btnCsv').style.display = errCount < rows.length ? 'inline-block' : 'none';
+  }
+</script>
+</body>
+</html>
